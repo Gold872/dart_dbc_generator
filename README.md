@@ -16,8 +16,32 @@ dart pub add dart_dbc_generator
 dart run dart_dbc_generator -i example.dbc -o lib/src/generated/
 ```
 
+## Generated Class Usage
+
+Below is an example of encoding and decoding a frame named "Example" with the fields "Signal_1" and "Signal_2":
+
+```dart
+// Create an "ExampleMessage"
+ExampleMessage example = ExampleMessage(
+    signal1: 0.5,
+    signal2: -0.25,
+);
+
+// Encode the message into a CAN packet
+Uint8List buffer = example.writeToBuffer();
+
+// ...
+
+// Decode an "Example" from a CAN packet
+ExampleMessage example = ExampleMessage.fromBuffer(...);
+print(example);
+
+// All fields in the generated classes are mutable
+example.signal1 = 2;
+```
+
 ## Known Limitations
 
-* Does not support message decoding
+* Does not support multiplex message decoding
 * Does not currently support encoding or decoding CAN FD
 * Generated classes will not compile if the message name starts with a number
