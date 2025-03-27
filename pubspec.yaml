@@ -1,0 +1,16 @@
+name: dart_dbc_generator
+description: A package to generate classes from a CAN DBC file for parsing CAN messages.
+version: 0.0.1
+repository: https://github.com/Gold872/dart_dbc_generator
+
+environment:
+  sdk: ^3.7.2
+
+# Add regular dependencies here.
+dependencies:
+  args: ^2.5.0
+  change_case: ^2.2.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.24.0
