@@ -27,19 +27,27 @@ ArgParser buildParser() {
     ..addOption(
       'input-file',
       abbr: 'i',
-      valueHelp: 'The input file to generate code for',
+      valueHelp: 'The input file to generate code for.',
+      mandatory: true,
+    )
+    ..addOption(
+      'output-path',
+      abbr: 'o',
+      valueHelp: 'The output directory of the generated file.',
       mandatory: true,
     )
     ..addFlag(
       'help',
       abbr: 'h',
       negatable: false,
-      help: 'Print this usage information',
+      help: 'Print this usage information.',
     );
 }
 
 void printUsage(ArgParser parser) {
-  print('Usage: dart_dbc_generator -i <input file> [arguments]');
+  print(
+    'Usage: dart_dbc_generator -i <input file> -o <output directory> [arguments]',
+  );
   print(parser.usage);
 }
 
@@ -53,24 +61,30 @@ void main(List<String> arguments) async {
       return;
     }
 
-    final filePath = results.option('input-file')!;
-    final file = File(filePath);
+    final String filePath = results.option('input-file')!;
+    final String outputPath = results.option('output-path')!;
+    final File inputFile = File(filePath);
+    final Directory outputDirectory = Directory(outputPath);
 
-    if (!await file.exists()) {
+    if (!await inputFile.exists()) {
       print('File not found: $filePath');
       return;
     }
 
     try {
-      final dbc = await DBCDatabase.loadFromBytes(file.readAsBytesSync());
+      final dbc = await DBCDatabase.loadFromBytes(inputFile.readAsBytesSync());
       final generatedCode = generateDartClasses(dbc);
 
       final outputFileName =
-          '${file.absolute.path.replaceAll('\\', '/').split('/').last.split('.').first.toSnakeCase()}_messages.dbc.dart';
-      final outputFile = File('lib/$outputFileName');
+          '${inputFile.absolute.path.replaceAll('\\', '/').split('/').last.split('.').first.toSnakeCase()}_messages.dbc.dart';
+      final outputFile = File(
+        '${outputDirectory.path}/$outputFileName'
+            .replaceAll('\\', '/')
+            .replaceAll('//', '/'),
+      );
 
       await outputFile.writeAsString(generatedCode);
-      print('Generated classes written to $outputFileName');
+      print('Generated classes written to ${outputFile.path}');
     } catch (e) {
       print('Error processing DBC file: $e');
     }
@@ -96,6 +110,7 @@ String generateDartClasses(DBCDatabase dbc) {
     final messageLength = dbc.messageLengths[dbEntry.key]!;
     final multiplexor = dbc.multiplexors[dbEntry.key] ?? "";
 
+    // dart format off
     // Getters
     buffer.writeln('  @override');
     buffer.writeln('  String messageName = "$messageName";');
@@ -156,7 +171,7 @@ String generateDartClasses(DBCDatabase dbc) {
     // Constructor
     buffer.write('  $className(');
     if (dbEntry.value.isNotEmpty) {
-      buffer.write('{');
+      buffer.writeln('{');
       for (final signal in dbEntry.value) {
         final fieldName = signal.name.toCamelCase();
         buffer.writeln('    this.$fieldName = ${numToStringWithMinimumDecimals(max(signal.offset, signal.min))},');
@@ -229,6 +244,7 @@ String generateDartClasses(DBCDatabase dbc) {
     buffer.writeln('  }');
     buffer.writeln('}');
   }
+  // dart format on
 
   return buffer.toString();
 }

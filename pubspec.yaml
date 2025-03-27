@@ -4,7 +4,7 @@ version: 0.0.1
 repository: https://github.com/Gold872/dart_dbc_generator
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.7.0
 
 # Add regular dependencies here.
 dependencies:
