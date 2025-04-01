@@ -12,6 +12,7 @@ const String typedLibPrefix = r'$_typed';
 const String fileHeader = '''
 // AUTO GENERATED FILE, DO NOT MODIFY
 
+// ignore_for_file: type=lint
 // ignore_for_file: annotate_overrides, camel_case_types, comment_references
 // ignore_for_file: constant_identifier_names, library_prefixes
 // ignore_for_file: non_constant_identifier_names, prefer_final_fields
