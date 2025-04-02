@@ -73,7 +73,7 @@ void main(List<String> arguments) async {
     }
 
     try {
-      final dbc = await DBCDatabase.loadFromBytes(inputFile.readAsBytesSync());
+      final dbc = await DBCDatabase.loadFromFile(inputFile);
       final generatedCode = generateDartClasses(dbc);
 
       final outputFileName =

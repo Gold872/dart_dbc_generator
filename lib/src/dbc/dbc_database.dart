@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:dart_dbc_generator/src/dbc/dbc_signal.dart';
 
@@ -40,7 +39,7 @@ class DBCDatabase {
   ///
   /// This function may throw, when any of the given files dont exist.
   /// If the given file is not in line with DBC format then it will return a [DBCDatabase] with empty [DBCDatabase.database] field, an will therefore not decode anything
-  static Future<DBCDatabase> loadFromBytes(Uint8List bytes) async {
+  static Future<DBCDatabase> loadFromFile(File file) async {
     Map<int, String> messageNames = {};
     Map<int, List<DBCSignal>> database = {};
     Map<int, int> messageLengths = {};
@@ -48,13 +47,15 @@ class DBCDatabase {
     Map<int, String> multiplexors = {};
     Map<String, Map<int, String>> valueTable = {};
 
-    for (int i = 0; i < bytes.length; i++) {
-      if (bytes[i] > 127) {
-        bytes[i] = 33; // !
-      }
-    }
+    // for (int i = 0; i < bytes.length; i++) {
+    //   if (bytes[i] > 127) {
+    //     bytes[i] = 33; // !
+    //   }
+    // }
 
-    List<String> lines = AsciiDecoder().convert(bytes).split('\n');
+    String fileString = await file.readAsString();
+
+    List<String> lines = fileString.split('\n');
 
     RegExp messageRegex = RegExp(
       r"BO_\s[0-9]{1,4}\s[a-zA-z0-9]+:\s\d\s[a-zA-z]+",
