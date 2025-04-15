@@ -119,7 +119,7 @@ class DBCSignal {
     String lengthMatch = lengthRegex.firstMatch(data)![0]!.substring(1);
     length = int.parse(lengthMatch.substring(0, lengthMatch.length - 1));
 
-    mapping = BitField.getMapping(length, start, signalType);
+    mapping = BitField.getMapping(length, start, lengthOfMessage, signalType);
     mappingIndexes =
         mapping
             .asMap()

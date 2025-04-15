@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:dart_dbc_generator/src/dbc/dbc_signal.dart';
 
-const int canIdLength = 2; // in bytes
 const int byteLen = 8; // in bits
-const int maxPayload = 8; // in bytes
 
 /// An object that stores multiple [DBCSignal]-s along with information needed to decode them
 class DBCDatabase {
@@ -46,12 +44,6 @@ class DBCDatabase {
     Map<int, bool> isMultiplex = {};
     Map<int, String> multiplexors = {};
     Map<String, Map<int, String>> valueTable = {};
-
-    // for (int i = 0; i < bytes.length; i++) {
-    //   if (bytes[i] > 127) {
-    //     bytes[i] = 33; // !
-    //   }
-    // }
 
     String fileString = await file.readAsString();
 

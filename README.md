@@ -28,12 +28,12 @@ ExampleMessage example = ExampleMessage(
 );
 
 // Encode the message into a CAN packet
-Uint8List buffer = example.writeToBuffer();
+Uint8List buffer = example.encode();
 
 // ...
 
 // Decode an "Example" from a CAN packet
-ExampleMessage example = ExampleMessage.fromBuffer(...);
+ExampleMessage example = ExampleMessage.decode(...);
 print(example);
 
 // All fields in the generated classes are mutable

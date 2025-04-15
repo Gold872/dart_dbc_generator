@@ -10,7 +10,7 @@ abstract class BitField {
   ///
   /// CAN decoding requires this bit level representation to be mirrored byte by byte
   static List<int> from(Uint8List bytes) {
-    List<int> data = List.filled(64, 0);
+    List<int> data = List.filled(bytes.length * byteLen, 0);
     int byteCnt = 0;
     for (int byte in bytes) {
       int mask = 1 << (byteLen - 1);
@@ -49,9 +49,15 @@ abstract class BitField {
   /// Returns a mapping to be used when decoding
   ///
   /// This mapping contains the weight each bit will have towards a decoded value
-  static List<int> getMapping(int length, int start, DBCSignalType signalType) {
+  static List<int> getMapping(
+    int length,
+    int start,
+    int messageLengthBits,
+    DBCSignalType signalType,
+  ) {
+    int messageLengthBytes = (messageLengthBits / 8).ceil();
+    List<int> data = List.filled(messageLengthBits, 0);
     if (signalType == DBCSignalType.INTEL) {
-      List<int> data = List.filled(64, 0);
       int exp = 0;
       List<int> indexes = List.filled(length, 0);
       int idxIdx = 0;
@@ -59,7 +65,7 @@ abstract class BitField {
         indexes[idxIdx++] = start++;
       }
 
-      for (int byte = 0; byte < maxPayload; byte++) {
+      for (int byte = 0; byte < messageLengthBytes; byte++) {
         int offset = byte * byteLen;
         for (int bit = offset; bit < offset + byteLen; bit++) {
           if (indexes.contains(bit)) {
@@ -69,7 +75,6 @@ abstract class BitField {
       }
       return data;
     } else {
-      List<int> data = List.filled(64, 0);
       int exp = length - 1;
 
       int trueStart = start;
@@ -96,7 +101,7 @@ abstract class BitField {
         }
       }
 
-      for (int byte = 0; byte < maxPayload; byte++) {
+      for (int byte = 0; byte < messageLengthBytes; byte++) {
         int offset = byte * byteLen;
         for (int bit = byteLen - 1 + offset; bit >= offset; bit--) {
           if (indexes.contains(bit)) {
