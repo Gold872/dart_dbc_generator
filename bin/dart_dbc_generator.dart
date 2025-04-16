@@ -275,8 +275,10 @@ String numToStringWithMinimumDecimals(num value) {
   String stringValue = value.toString();
   if (stringValue.contains('.')) {
     // Remove trailing zeros
-    stringValue = stringValue.replaceAll(RegExp(r'0*$'), '');
-    stringValue = stringValue.replaceAll('.', '');
+    stringValue = stringValue.replaceAll(RegExp(r'0+$'), '');
+    if (stringValue.endsWith('.')) {
+      stringValue = stringValue.substring(0, stringValue.length - 1);
+    }
   }
   return stringValue;
 }
