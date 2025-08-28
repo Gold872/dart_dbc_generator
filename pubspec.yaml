@@ -10,7 +10,9 @@ environment:
 dependencies:
   args: ^2.5.0
   change_case: ^2.2.0
+  dart_style: ^3.1.2
   meta: ^1.16.0
+  pub_semver: ^2.2.0
 
 dev_dependencies:
   lints: ^5.0.0

@@ -3,7 +3,10 @@ import 'dart:math';
 
 import 'package:args/args.dart';
 import 'package:change_case/change_case.dart';
+import 'package:dart_dbc_generator/dart_dbc_generator.dart';
 import 'package:dart_dbc_generator/src/dbc/dbc_database.dart';
+import 'package:dart_style/dart_style.dart';
+import 'package:pub_semver/pub_semver.dart';
 
 const String dbcLibPrefix = r'$_dbc';
 const String mathLibPrefix = r'$_math';
@@ -22,6 +25,30 @@ import 'dart:math' as $mathLibPrefix;
 import 'dart:typed_data' as $typedLibPrefix;
 
 import 'package:dart_dbc_generator/dart_dbc_generator.dart' as $dbcLibPrefix;''';
+
+final DartFormatter formatter = DartFormatter(
+  languageVersion: Version(3, 8, 0),
+);
+
+extension on DBCSignal {
+  String get dataType => (factor != 1 || offset != 0) ? 'double' : 'int';
+
+  String get fieldName => name.toCamelCase();
+}
+
+extension on num {
+  String toStringMinDecimal() {
+    String stringValue = toString();
+    if (stringValue.contains('.')) {
+      // Remove trailing zeros
+      stringValue = stringValue.replaceAll(RegExp(r'0+$'), '');
+      if (stringValue.endsWith('.')) {
+        stringValue = stringValue.substring(0, stringValue.length - 1);
+      }
+    }
+    return stringValue;
+  }
+}
 
 ArgParser buildParser() {
   return ArgParser()
@@ -113,172 +140,162 @@ String generateDartClasses(DBCDatabase dbc) {
 
     // dart format off
     // Getters
-    buffer.writeln('  @override');
-    buffer.writeln('  String messageName = \'$messageName\';');
+    buffer.writeln('@override');
+    buffer.writeln('String messageName = \'$messageName\';');
     buffer.writeln();
-    buffer.writeln('  @override');
-    buffer.writeln('  int messageLength = $messageLength;');
+    buffer.writeln('@override');
+    buffer.writeln('int messageLength = $messageLength;');
     buffer.writeln();
-    buffer.writeln('  @override');
-    buffer.writeln('  int canId = 0x${dbEntry.key.toRadixString(16)};');
+    buffer.writeln('@override');
+    buffer.writeln('int canId = 0x${dbEntry.key.toRadixString(16)};');
     buffer.writeln();
-    buffer.writeln('  /// Whether or not "$messageName" is multiplex');
-    buffer.writeln('  static const bool isMultiplex = $isMultiplex;');
+    buffer.writeln('/// Whether or not "$messageName" is multiplex');
+    buffer.writeln('static const bool isMultiplex = $isMultiplex;');
     buffer.writeln();
-    buffer.writeln('  /// The multiplexor for "$messageName"');
-    buffer.writeln('  static const String multiplexor = \'$multiplexor\';');
+    buffer.writeln('/// The multiplexor for "$messageName"');
+    buffer.writeln('static const String multiplexor = \'$multiplexor\';');
     buffer.writeln();
 
     // Signal value fields
     for (final signalEntry in dbEntry.value) {
-      final fieldName = signalEntry.name.toCamelCase();
-      buffer.writeln('  /// Value of signal "${signalEntry.name}"');
-      buffer.writeln('  num $fieldName;');
+      buffer.writeln('/// Value of signal "${signalEntry.name}"');
+      buffer.writeln('${signalEntry.dataType} ${signalEntry.fieldName};');
       buffer.writeln();
     }
 
     // All signals
     for (final signal in dbEntry.value) {
-      final fieldName = signal.name.toCamelCase();
+      final fieldName = signal.fieldName;
 
-      buffer.writeln('  final $dbcLibPrefix.DBCSignal _${fieldName}Signal = $dbcLibPrefix.DBCSignal(');
-      buffer.writeln('    name: \'${signal.name}\',');
-      buffer.writeln('    signalSignedness: $dbcLibPrefix.${signal.signalSignedness.toString()},');
-      buffer.writeln('    signalType: $dbcLibPrefix.${signal.signalType.toString()},');
-      buffer.writeln('    signalMode: $dbcLibPrefix.${signal.signalMode.toString()},');
-      buffer.writeln('    multiplexGroup: ${signal.multiplexGroup},');
-      buffer.writeln('    start: ${signal.start},');
-      buffer.writeln('    length: ${signal.length},');
+      buffer.writeln('final $dbcLibPrefix.DBCSignal _${fieldName}Signal = $dbcLibPrefix.DBCSignal(');
+      buffer.writeln('name: \'${signal.name}\',');
+      buffer.writeln('signalSignedness: $dbcLibPrefix.${signal.signalSignedness.toString()},');
+      buffer.writeln('signalType: $dbcLibPrefix.${signal.signalType.toString()},');
+      buffer.writeln('signalMode: $dbcLibPrefix.${signal.signalMode.toString()},');
+      buffer.writeln('multiplexGroup: ${signal.multiplexGroup},');
+      buffer.writeln('start: ${signal.start},');
+      buffer.writeln('length: ${signal.length},');
+      buffer.writeln('    // dart format off');
       buffer.writeln('    mapping: ${signal.mapping.toList().toString()},');
       buffer.writeln('    mappingIndexes: ${signal.mappingIndexes.toList().toString()},');
-      buffer.writeln('    factor: ${numToStringWithMinimumDecimals(signal.factor)},');
-      buffer.writeln('    offset: ${numToStringWithMinimumDecimals(signal.offset)},');
-      buffer.writeln('    min: ${numToStringWithMinimumDecimals(signal.min)},');
-      buffer.writeln('    max: ${numToStringWithMinimumDecimals(signal.max)},');
-      buffer.writeln('    unit: \'${signal.unit}\',');
-      buffer.writeln('  );');
+      buffer.writeln('    // dart format on');
+      buffer.writeln('factor: ${signal.factor.toStringMinDecimal()},');
+      buffer.writeln('offset: ${signal.offset.toStringMinDecimal()},');
+      buffer.writeln('min: ${signal.min.toStringMinDecimal()},');
+      buffer.writeln('max: ${signal.max.toStringMinDecimal()},');
+      buffer.writeln('unit: \'${signal.unit}\',');
+      buffer.writeln(');');
       buffer.writeln();
     }
 
     // Signals list getter
-    buffer.writeln('  @override');
-    buffer.writeln('  List<$dbcLibPrefix.DBCSignal> get signals => [');
+    buffer.writeln('@override');
+    buffer.writeln('List<$dbcLibPrefix.DBCSignal> get signals => [');
     for (final signal in dbEntry.value) {
-      buffer.writeln('    _${signal.name.toCamelCase()}Signal,');
+      buffer.writeln('_${signal.fieldName}Signal,');
     }
-    buffer.writeln('  ];');
+    buffer.writeln('];');
     buffer.writeln();
 
     // Constructor
-    buffer.write('  $className(');
+    buffer.write('$className(');
     if (dbEntry.value.isNotEmpty) {
       buffer.writeln('{');
       for (final signal in dbEntry.value) {
-        final fieldName = signal.name.toCamelCase();
-        buffer.writeln('    this.$fieldName = ${numToStringWithMinimumDecimals(max(signal.offset, signal.min))},');
+        buffer.writeln('this.${signal.fieldName} = ${max(signal.offset, signal.min).toStringMinDecimal()},');
       }
-      buffer.writeln('  });');
+      buffer.writeln('});');
     } else {
       buffer.writeln(');');
     }
     buffer.writeln();
 
     // Copy with
-    buffer.writeln('  /// Creates a clone of this [$className] with the non-null values replaced');
-    buffer.write('  $className copyWith(');
+    buffer.writeln('/// Creates a clone of this [$className] with the non-null values replaced');
+    buffer.write('$className copyWith(');
     if (dbEntry.value.isNotEmpty) {
       buffer.writeln('{');
       for (final signal in dbEntry.value) {
-        buffer.writeln('    num? ${signal.name.toCamelCase()},');
+        buffer.writeln('${signal.dataType}? ${signal.fieldName},');
       }
-      buffer.writeln('  }) => $className(');
+      buffer.writeln('}) => $className(');
       for (final signal in dbEntry.value) {
-        final signalName = signal.name.toCamelCase();
-        buffer.writeln('    $signalName: $signalName ?? this.$signalName,');
+        final signalName = signal.fieldName;
+        buffer.writeln('$signalName: $signalName ?? this.$signalName,');
       }
-      buffer.writeln('  );');
+      buffer.writeln(');');
     } else {
       buffer.writeln(') => $className();');
     }
     buffer.writeln();
 
     // From buffer constructor
-    buffer.writeln('  factory $className.decode(List<int> payload) {');
-    buffer.writeln('    final message = $className();');
-    buffer.writeln('    final typedBuffer = $typedLibPrefix.Uint8List.fromList(payload);');
-    buffer.writeln('    final bitField = $dbcLibPrefix.BitField.from(typedBuffer.sublist(0, message.messageLength));');
+    buffer.writeln('factory $className.decode(List<int> payload) {');
+    buffer.writeln('final message = $className();');
+    buffer.writeln('final typedBuffer = $typedLibPrefix.Uint8List.fromList(payload);');
+    buffer.writeln('final bitField = $dbcLibPrefix.BitField.from(typedBuffer.sublist(0, message.messageLength));');
     buffer.writeln();
     for (final signalEntry in dbEntry.value) {
-      final fieldName = signalEntry.name.toCamelCase();
+      final fieldName = signalEntry.fieldName;
       final signalFieldName = '_${fieldName}Signal';
-      buffer.writeln('    message.$fieldName =\n        message.$signalFieldName.decode(bitField) ??\n        $mathLibPrefix.max(0, message.$signalFieldName.min);');
+      final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
+      buffer.writeln('message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;');
     }
     buffer.writeln();
-    buffer.writeln('    return message;');
-    buffer.writeln('  }');
+    buffer.writeln('return message;');
+    buffer.writeln('}');
     buffer.writeln();
 
     // From json constructor
-    buffer.write('  factory $className.fromJson(Map<String, dynamic> json) =>\n      $className(');
+    buffer.write('factory $className.fromJson(Map<String, dynamic> json) => $className(');
     if (dbEntry.value.isNotEmpty) {
       buffer.writeln();
       for (final signalEntry in dbEntry.value) {
-        buffer.writeln('        ${signalEntry.name.toCamelCase()}: json[\'${signalEntry.name}\'] ?? ${numToStringWithMinimumDecimals(max(signalEntry.offset, signalEntry.min))},');
+        buffer.writeln('${signalEntry.fieldName}: json[\'${signalEntry.name}\'] ?? ${max(signalEntry.offset, signalEntry.min).toStringMinDecimal()},');
       }
-      buffer.writeln('      );');
+      buffer.writeln(');');
     } else {
       buffer.writeln(');');
     }
     buffer.writeln();
 
-    // Write to buffer
-    buffer.writeln('  @override');
-    buffer.writeln('  $typedLibPrefix.Uint8List encode() {');
-    buffer.writeln('    final Map<$dbcLibPrefix.DBCSignal, num> values = {');
+    // Encode
+    buffer.writeln('@override');
+    buffer.writeln('$typedLibPrefix.Uint8List encode() {');
+    buffer.writeln('final Map<$dbcLibPrefix.DBCSignal, num> values = {');
     for (final signalEntry in dbEntry.value) {
-      final signalName = signalEntry.name.toCamelCase();
-      buffer.writeln('      _${signalName}Signal: $signalName,');
+      final signalName = signalEntry.fieldName;
+      buffer.writeln('_${signalName}Signal: $signalName,');
     }
-    buffer.writeln('    };');
+    buffer.writeln('};');
     buffer.writeln();
-    buffer.writeln('    return encodeWithValues(values);');
-    buffer.writeln('  }');
+    buffer.writeln('return encodeWithValues(values);');
+    buffer.writeln('}');
     buffer.writeln();
 
     // To json
-    buffer.writeln('  @override');
-    buffer.writeln('  Map<String, dynamic> toJson() => {');
+    buffer.writeln('@override');
+    buffer.writeln('Map<String, dynamic> toJson() => {');
     for (final signalEntry in dbEntry.value) {
-      buffer.writeln('    \'${signalEntry.name}\': ${signalEntry.name.toCamelCase()},');
+      buffer.writeln('\'${signalEntry.name}\': ${signalEntry.fieldName},');
     }
-    buffer.writeln('  };');
+    buffer.writeln('};');
     buffer.writeln();
 
     // To string override
-    buffer.writeln('  @override');
-    buffer.writeln('  String toString() {');
-    buffer.write('    return \'$messageName(');
+    buffer.writeln('@override');
+    buffer.writeln('String toString() => ');
+    buffer.write('\'$messageName(');
     for (final signal in dbEntry.value) {
-      final signalName = signal.name.toCamelCase();
+      final signalName = signal.fieldName;
       buffer.write('\\n  ${signal.name}=\$$signalName');
     }
     buffer.writeln('\\n)\';');
-    buffer.writeln('  }');
     buffer.writeln('}');
   }
   // dart format on
 
-  return buffer.toString();
-}
+  final String fullFile = buffer.toString();
 
-String numToStringWithMinimumDecimals(num value) {
-  String stringValue = value.toString();
-  if (stringValue.contains('.')) {
-    // Remove trailing zeros
-    stringValue = stringValue.replaceAll(RegExp(r'0+$'), '');
-    if (stringValue.endsWith('.')) {
-      stringValue = stringValue.substring(0, stringValue.length - 1);
-    }
-  }
-  return stringValue;
+  return formatter.format(fullFile);
 }
