@@ -60,7 +60,11 @@ class DBCDatabase {
     RegExp messageIdRegex = RegExp(r"BO_\s[0-9]{1,4}");
     RegExp messageLengthRegex = RegExp(r":\s\d\s");
 
-    RegExp signalNameRegex = RegExp(r"SG_\s[a-zA-Z0-9_ ]+");
+    RegExp signalNameRegex = RegExp(r"SG_\s[a-zA-Z0-9_]+");
+
+    RegExp extendedMultiplexValue = RegExp(
+      r"SG_MUL_VAL_\s(\d+)\s([a-zA-Z0-9_]+)\s([a-zA-Z0-9_]+)\s(.+);",
+    );
 
     RegExp valueTableRegex = RegExp(
       r'VAL_\s+(\d+)\s+(\w+)\s+((?:\d+\s+"[^"]+"\s*)+)',
@@ -95,6 +99,39 @@ class DBCDatabase {
         canId = 0;
       }
 
+      if (extendedMultiplexValue.hasMatch(line)) {
+        RegExpMatch match = extendedMultiplexValue.firstMatch(line)!;
+
+        int canID = int.parse(match.group(1)!);
+        String signalName = match.group(2)!;
+        String multiplexerSignalName = match.group(3)!;
+        String rangesString = match.group(4)!;
+
+        if (database.containsKey(canID) &&
+            database[canID]!.any((e) => e.name == signalName)) {
+          int index = database[canID]!.indexWhere((e) => e.name == signalName);
+          final DBCSignal signal = database[canID]![index];
+
+          List<int> multiplexerIDs = [];
+
+          for (String range in rangesString.split(', ')) {
+            List<String> pair = range.split('-');
+            int lower = int.parse(pair[0]);
+            int upper = int.parse(pair[1]);
+
+            for (int i = lower; i <= upper; i++) {
+              multiplexerIDs.add(i);
+            }
+          }
+
+          database[canID]![index] = signal.copyWith(
+            signalMode: DBCSignalMode.MULTIPLEX_GROUP,
+            multiplexerName: multiplexerSignalName,
+            multiplexerIds: multiplexerIDs,
+          );
+        }
+      }
+
       /// To read the individual signal value maps and assign to SignalValue map
       if (valueTableRegex.hasMatch(line)) {
         RegExpMatch? match = valueTableRegex.firstMatch(line);
@@ -116,15 +153,23 @@ class DBCDatabase {
     // Post process
     for (int canId in database.keys) {
       if (database[canId]!.any(
-        (element) => element.signalMode == DBCSignalMode.MULTIPLEX_GROUP,
+        (element) => element.signalMode == DBCSignalMode.MULTIPLEXOR,
       )) {
+        final multiplexorSignal = database[canId]!.firstWhere(
+          (element) => element.signalMode == DBCSignalMode.MULTIPLEXOR,
+        );
+        for (int i = 0; i < database[canId]!.length; i++) {
+          final signal = database[canId]![i];
+
+          if (signal.signalMode == DBCSignalMode.MULTIPLEX_GROUP &&
+              signal.multiplexerName == '') {
+            database[canId]![i] = signal.copyWith(
+              multiplexerName: multiplexorSignal.name,
+            );
+          }
+        }
         isMultiplex[canId] = true;
-        multiplexors[canId] =
-            database[canId]!
-                .firstWhere(
-                  (element) => element.signalMode == DBCSignalMode.MULTIPLEXOR,
-                )
-                .name;
+        multiplexors[canId] = multiplexorSignal.name;
       } else {
         isMultiplex[canId] = false;
       }

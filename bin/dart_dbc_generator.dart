@@ -172,7 +172,10 @@ String generateDartClasses(DBCDatabase dbc) {
       buffer.writeln('signalSignedness: $dbcLibPrefix.${signal.signalSignedness.toString()},');
       buffer.writeln('signalType: $dbcLibPrefix.${signal.signalType.toString()},');
       buffer.writeln('signalMode: $dbcLibPrefix.${signal.signalMode.toString()},');
-      buffer.writeln('multiplexGroup: ${signal.multiplexGroup},');
+      if (signal.signalMode == DBCSignalMode.MULTIPLEX_GROUP) {
+        buffer.writeln('multiplexerName: \'${signal.multiplexerName}\',');
+        buffer.writeln('multiplexerIds: ${signal.multiplexerIds.toString()},');
+      }
       buffer.writeln('start: ${signal.start},');
       buffer.writeln('length: ${signal.length},');
       buffer.writeln('    // dart format off');
@@ -229,22 +232,7 @@ String generateDartClasses(DBCDatabase dbc) {
     }
     buffer.writeln();
 
-    // From buffer constructor
-    buffer.writeln('factory $className.decode(List<int> payload) {');
-    buffer.writeln('final message = $className();');
-    buffer.writeln('final typedBuffer = $typedLibPrefix.Uint8List.fromList(payload);');
-    buffer.writeln('final bitField = $dbcLibPrefix.BitField.from(typedBuffer.sublist(0, message.messageLength));');
-    buffer.writeln();
-    for (final signalEntry in dbEntry.value) {
-      final fieldName = signalEntry.fieldName;
-      final signalFieldName = '_${fieldName}Signal';
-      final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
-      buffer.writeln('message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;');
-    }
-    buffer.writeln();
-    buffer.writeln('return message;');
-    buffer.writeln('}');
-    buffer.writeln();
+    _generateDecode(buffer, className, dbEntry.value, isMultiplex);
 
     // From json constructor
     buffer.write('factory $className.fromJson(Map<String, dynamic> json) => $className(');
@@ -259,19 +247,7 @@ String generateDartClasses(DBCDatabase dbc) {
     }
     buffer.writeln();
 
-    // Encode
-    buffer.writeln('@override');
-    buffer.writeln('$typedLibPrefix.Uint8List encode() {');
-    buffer.writeln('final Map<$dbcLibPrefix.DBCSignal, num> values = {');
-    for (final signalEntry in dbEntry.value) {
-      final signalName = signalEntry.fieldName;
-      buffer.writeln('_${signalName}Signal: $signalName,');
-    }
-    buffer.writeln('};');
-    buffer.writeln();
-    buffer.writeln('return encodeWithValues(values);');
-    buffer.writeln('}');
-    buffer.writeln();
+    _generateEncode(buffer, dbEntry.value, isMultiplex);
 
     // To json
     buffer.writeln('@override');
@@ -298,4 +274,201 @@ String generateDartClasses(DBCDatabase dbc) {
   final String fullFile = buffer.toString();
 
   return formatter.format(fullFile);
+}
+
+void _generateEncode(
+  StringBuffer buffer,
+  List<DBCSignal> signals,
+  bool isMultiplex,
+) {
+  buffer.writeln('@override');
+  buffer.writeln('$typedLibPrefix.Uint8List encode() {');
+  buffer.writeln('final Map<$dbcLibPrefix.DBCSignal, num> values = {');
+
+  if (isMultiplex) {
+    void generateSubMultiplexEncode(DBCSignal baseSignal) {
+      final List<int> allMultiplexIDs = [];
+
+      for (final signal in signals.where(
+        (e) => e.multiplexerName == baseSignal.name,
+      )) {
+        allMultiplexIDs.addAll(signal.multiplexerIds);
+      }
+
+      if (allMultiplexIDs.isEmpty) {
+        return;
+      }
+
+      allMultiplexIDs.sort();
+
+      buffer.writeln('switch (${baseSignal.fieldName}) {');
+
+      for (final id in allMultiplexIDs.toSet()) {
+        buffer.writeln('case $id:');
+
+        for (final compatibleSignal in signals.where(
+          (e) =>
+              e.multiplexerIds.contains(id) &&
+              e.multiplexerName == baseSignal.name,
+        )) {
+          final fieldName = compatibleSignal.fieldName;
+          final signalFieldName = '_${compatibleSignal.fieldName}Signal';
+
+          buffer.writeln('values[$signalFieldName] = $fieldName;');
+        }
+
+        for (final compatibleSignal in signals.where(
+          (e) =>
+              e.multiplexerIds.contains(id) &&
+              e.multiplexerName == baseSignal.name,
+        )) {
+          generateSubMultiplexEncode(compatibleSignal);
+        }
+
+        buffer.writeln('break;');
+      }
+
+      buffer.writeln('default: break; }');
+    }
+
+    for (final signalEntry in signals.where(
+      (e) =>
+          e.signalMode == DBCSignalMode.MULTIPLEXOR ||
+          e.signalMode == DBCSignalMode.SIGNAL,
+    )) {
+      final signalName = signalEntry.fieldName;
+      buffer.writeln('_${signalName}Signal: $signalName,');
+    }
+
+    buffer.writeln('};');
+    buffer.writeln();
+
+    for (final signalEntry in signals.where(
+      (e) => e.signalMode == DBCSignalMode.MULTIPLEXOR,
+    )) {
+      generateSubMultiplexEncode(signalEntry);
+    }
+  } else {
+    for (final signalEntry in signals) {
+      final signalName = signalEntry.fieldName;
+      buffer.writeln('_${signalName}Signal: $signalName,');
+    }
+    buffer.writeln('};');
+  }
+
+  buffer.writeln();
+  buffer.writeln('return encodeWithValues(values);');
+  buffer.writeln('}');
+  buffer.writeln();
+}
+
+void _generateDecode(
+  StringBuffer buffer,
+  String className,
+  List<DBCSignal> signals,
+  bool isMultiplex,
+) {
+  buffer.writeln('factory $className.decode(List<int> payload) {');
+  buffer.writeln('final message = $className();');
+  buffer.writeln(
+    'final typedBuffer = $typedLibPrefix.Uint8List.fromList(payload);',
+  );
+  buffer.writeln(
+    'final bitField = $dbcLibPrefix.BitField.from(typedBuffer.sublist(0, message.messageLength));',
+  );
+  buffer.writeln();
+
+  if (isMultiplex) {
+    // Function to recursively generate switch statements for multiplex signals
+    void generateSubMultiplex(DBCSignal baseSignal) {
+      final List<int> allMultiplexIDs = [];
+
+      for (final signal in signals.where(
+        (e) => e.multiplexerName == baseSignal.name,
+      )) {
+        allMultiplexIDs.addAll(signal.multiplexerIds);
+      }
+
+      if (allMultiplexIDs.isEmpty) {
+        return;
+      }
+
+      allMultiplexIDs.sort();
+
+      buffer.writeln('switch (message.${baseSignal.fieldName}) {');
+
+      for (final id in allMultiplexIDs.toSet()) {
+        buffer.writeln('case $id:');
+
+        for (final compatibleSignal in signals.where(
+          (e) =>
+              e.multiplexerIds.contains(id) &&
+              e.multiplexerName == baseSignal.name,
+        )) {
+          final fieldName = compatibleSignal.fieldName;
+          final signalFieldName = '_${compatibleSignal.fieldName}Signal';
+          final typeConversion =
+              'to${compatibleSignal.dataType.toCapitalCase()}()';
+
+          buffer.writeln(
+            'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+          );
+        }
+
+        for (final compatibleSignal in signals.where(
+          (e) =>
+              e.multiplexerIds.contains(id) &&
+              e.multiplexerName == baseSignal.name,
+        )) {
+          generateSubMultiplex(compatibleSignal);
+        }
+
+        buffer.writeln('break;');
+      }
+
+      buffer.writeln('default: break; }');
+    }
+
+    // First decode all of the regular signals
+    for (final signalEntry in signals.where(
+      (e) => e.signalMode == DBCSignalMode.SIGNAL,
+    )) {
+      final fieldName = signalEntry.fieldName;
+      final signalFieldName = '_${fieldName}Signal';
+      final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
+
+      buffer.writeln(
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+      );
+    }
+
+    // Decode the multiplexor signal, then decode all of the signals which depend on it
+    for (final signalEntry in signals.where(
+      (e) => e.signalMode == DBCSignalMode.MULTIPLEXOR,
+    )) {
+      final fieldName = signalEntry.fieldName;
+      final signalFieldName = '_${fieldName}Signal';
+      final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
+
+      buffer.writeln(
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+      );
+
+      generateSubMultiplex(signalEntry);
+    }
+  } else {
+    for (final signalEntry in signals) {
+      final fieldName = signalEntry.fieldName;
+      final signalFieldName = '_${fieldName}Signal';
+      final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
+      buffer.writeln(
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+      );
+    }
+  }
+
+  buffer.writeln();
+  buffer.writeln('return message;');
+  buffer.writeln('}');
+  buffer.writeln();
 }

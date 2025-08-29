@@ -33,7 +33,8 @@ class DBCSignal {
     required this.signalSignedness,
     required this.signalType,
     required this.signalMode,
-    required this.multiplexGroup,
+    this.multiplexerName = '',
+    this.multiplexerIds = const [],
     required this.start,
     required this.length,
     required this.mapping,
@@ -45,11 +46,34 @@ class DBCSignal {
     required this.unit,
   });
 
+  DBCSignal copyWith({
+    DBCSignalMode? signalMode,
+    String? multiplexerName,
+    List<int>? multiplexerIds,
+  }) => DBCSignal(
+    name: name,
+    signalSignedness: signalSignedness,
+    signalType: signalType,
+    signalMode: signalMode ?? this.signalMode,
+    multiplexerIds: multiplexerIds ?? this.multiplexerIds,
+    multiplexerName: multiplexerName ?? this.multiplexerName,
+    start: start,
+    length: length,
+    mapping: mapping,
+    mappingIndexes: mappingIndexes,
+    factor: factor,
+    offset: offset,
+    min: min,
+    max: max,
+    unit: unit,
+  );
+
   final String name;
   final DBCSignalSignedness signalSignedness;
   final DBCSignalType signalType;
   final DBCSignalMode signalMode;
-  final int multiplexGroup;
+  final String multiplexerName;
+  final List<int> multiplexerIds;
   final int start;
   final int length;
 
@@ -64,7 +88,7 @@ class DBCSignal {
   final double max;
   final String unit;
 
-  static RegExp signalNameRegex = RegExp(r"SG_ (\w+) :");
+  static RegExp signalNameRegex = RegExp(r"SG_ (\w+) ");
   static RegExp signednessRegex = RegExp(r"@\d[+-]{1}");
   static RegExp multiplexorRegex = RegExp(r" M ");
   static RegExp multiplexGroupRegex = RegExp(r" m\d ");
@@ -101,17 +125,20 @@ class DBCSignal {
             ? DBCSignalType.MOTOROLA
             : DBCSignalType.INTEL;
 
-    if (multiplexGroupRegex.hasMatch(data)) {
+    if (multiplexorRegex.hasMatch(data)) {
+      signalMode = DBCSignalMode.MULTIPLEXOR;
+      multiplexGroup = -1;
+    } else if (multiplexGroupRegex.hasMatch(data)) {
       signalMode = DBCSignalMode.MULTIPLEX_GROUP;
-      multiplexGroup = int.parse(
-        multiplexGroupRegex.firstMatch(data)![0]!.substring(2, 3),
-      );
+
+      final multiplexerData = multiplexGroupRegex
+          .firstMatch(data)![0]!
+          .trim()
+          .split('m');
+      multiplexGroup = int.parse(multiplexerData[1]);
     } else {
       multiplexGroup = -1;
-      signalMode =
-          multiplexorRegex.hasMatch(data)
-              ? DBCSignalMode.MULTIPLEXOR
-              : DBCSignalMode.SIGNAL;
+      signalMode = DBCSignalMode.SIGNAL;
     }
 
     String startMatch = startbitRegex.firstMatch(data)![0]!.substring(2);
@@ -145,7 +172,8 @@ class DBCSignal {
       signalSignedness: signalSignedness,
       signalType: signalType,
       signalMode: signalMode,
-      multiplexGroup: multiplexGroup,
+      multiplexerName: '',
+      multiplexerIds: multiplexGroup != -1 ? [multiplexGroup] : [],
       start: start,
       length: length,
       mapping: mapping,
