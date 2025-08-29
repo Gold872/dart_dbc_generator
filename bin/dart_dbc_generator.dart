@@ -9,7 +9,6 @@ import 'package:dart_style/dart_style.dart';
 import 'package:pub_semver/pub_semver.dart';
 
 const String dbcLibPrefix = r'$_dbc';
-const String mathLibPrefix = r'$_math';
 const String typedLibPrefix = r'$_typed';
 
 const String fileHeader = '''
@@ -21,7 +20,6 @@ const String fileHeader = '''
 // ignore_for_file: non_constant_identifier_names, prefer_final_fields
 // ignore_for_file: unnecessary_import, unnecessary_this, unused_import
 
-import 'dart:math' as $mathLibPrefix;
 import 'dart:typed_data' as $typedLibPrefix;
 
 import 'package:dart_dbc_generator/dart_dbc_generator.dart' as $dbcLibPrefix;''';
@@ -411,7 +409,7 @@ void _generateDecode(
               'to${compatibleSignal.dataType.toCapitalCase()}()';
 
           buffer.writeln(
-            'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+            'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, compatibleSignal.min).toStringMinDecimal()}).$typeConversion;',
           );
         }
 
@@ -438,7 +436,7 @@ void _generateDecode(
       final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
 
       buffer.writeln(
-        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, signalEntry.min).toStringMinDecimal()}).$typeConversion;',
       );
     }
 
@@ -451,7 +449,7 @@ void _generateDecode(
       final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
 
       buffer.writeln(
-        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, signalEntry.min).toStringMinDecimal()}).$typeConversion;',
       );
 
       generateSubMultiplex(signalEntry);
@@ -462,7 +460,7 @@ void _generateDecode(
       final signalFieldName = '_${fieldName}Signal';
       final typeConversion = 'to${signalEntry.dataType.toCapitalCase()}()';
       buffer.writeln(
-        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? $mathLibPrefix.max(0, message.$signalFieldName.min)).$typeConversion;',
+        'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, signalEntry.min).toStringMinDecimal()}).$typeConversion;',
       );
     }
   }
