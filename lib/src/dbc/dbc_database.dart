@@ -50,14 +50,14 @@ class DBCDatabase {
     List<String> lines = fileString.split('\n');
 
     RegExp messageRegex = RegExp(
-      r"BO_\s[0-9]{1,4}\s[a-zA-z0-9]+:\s\d\s[a-zA-z]+",
+      r"BO_\s[0-9]+\s[a-zA-z0-9]+:\s\d\s[a-zA-z]+",
     );
     RegExp signalRegex = RegExp(
       r"\sSG_\s[a-zA-Z0-9_ ]+\s:\s[0-9\S]+\s[\S0-9]+\s[\S0-9]+\s[a-zA-Z\S]+\s{1,2}[a-zA-z]+",
     );
 
-    RegExp messageNameRegex = RegExp(r"BO_\s[0-9]{1,4}\s([a-zA-z0-9]+):\s");
-    RegExp messageIdRegex = RegExp(r"BO_\s[0-9]{1,4}");
+    RegExp messageNameRegex = RegExp(r"BO_\s[0-9]+\s([a-zA-z0-9]+):\s");
+    RegExp messageIdRegex = RegExp(r"BO_\s[0-9]+");
     RegExp messageLengthRegex = RegExp(r":\s\d\s");
 
     RegExp signalNameRegex = RegExp(r"SG_\s[a-zA-Z0-9_]+");

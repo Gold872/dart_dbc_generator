@@ -111,8 +111,9 @@ void main(List<String> arguments) async {
 
       await outputFile.writeAsString(generatedCode);
       print('Generated classes written to ${outputFile.path}');
-    } catch (e) {
+    } catch (e, stack) {
       print('Error processing DBC file: $e');
+      print(stack);
     }
   } catch (e) {
     print(e);
@@ -246,25 +247,8 @@ String generateDartClasses(DBCDatabase dbc) {
     buffer.writeln();
 
     _generateEncode(buffer, dbEntry.value, isMultiplex);
-
-    // To json
-    buffer.writeln('@override');
-    buffer.writeln('Map<String, dynamic> toJson() => {');
-    for (final signalEntry in dbEntry.value) {
-      buffer.writeln('\'${signalEntry.name}\': ${signalEntry.fieldName},');
-    }
-    buffer.writeln('};');
-    buffer.writeln();
-
-    // To string override
-    buffer.writeln('@override');
-    buffer.writeln('String toString() => ');
-    buffer.write('\'$messageName(');
-    for (final signal in dbEntry.value) {
-      final signalName = signal.fieldName;
-      buffer.write('\\n  ${signal.name}=\$$signalName');
-    }
-    buffer.writeln('\\n)\';');
+    _generateToJson(buffer, dbEntry.value, isMultiplex);
+    _generateToString(buffer, messageName, dbEntry.value, isMultiplex);
     buffer.writeln('}');
   }
   // dart format on
@@ -272,6 +256,145 @@ String generateDartClasses(DBCDatabase dbc) {
   final String fullFile = buffer.toString();
 
   return formatter.format(fullFile);
+}
+
+void generateSubMultiplex(
+  DBCSignal baseSignal,
+  List<DBCSignal> signals,
+  StringBuffer buffer,
+  void Function(DBCSignal signal) callback, {
+  String switchPrefix = '',
+}) {
+  final List<int> allMultiplexIDs = [];
+
+  for (final signal in signals.where(
+    (e) => e.multiplexerName == baseSignal.name,
+  )) {
+    allMultiplexIDs.addAll(signal.multiplexerIds);
+  }
+
+  if (allMultiplexIDs.isEmpty) {
+    return;
+  }
+
+  allMultiplexIDs.sort();
+
+  buffer.writeln('switch ($switchPrefix${baseSignal.fieldName}) {');
+
+  for (final id in allMultiplexIDs.toSet()) {
+    buffer.writeln('case $id:');
+
+    for (final compatibleSignal in signals.where(
+      (e) =>
+          e.multiplexerIds.contains(id) && e.multiplexerName == baseSignal.name,
+    )) {
+      callback(compatibleSignal);
+    }
+
+    for (final compatibleSignal in signals.where(
+      (e) =>
+          e.multiplexerIds.contains(id) && e.multiplexerName == baseSignal.name,
+    )) {
+      generateSubMultiplex(
+        compatibleSignal,
+        signals,
+        buffer,
+        callback,
+        switchPrefix: switchPrefix,
+      );
+    }
+
+    buffer.writeln('break;');
+  }
+
+  buffer.writeln('default: break; }');
+}
+
+void _generateToString(
+  StringBuffer buffer,
+  String messageName,
+  List<DBCSignal> signals,
+  bool isMultiplex,
+) {
+  buffer.writeln('@override');
+  if (isMultiplex) {
+    buffer.writeln('String toString() {');
+    buffer.write('String stringValue = \'$messageName(');
+
+    for (final signalEntry in signals.where(
+      (e) =>
+          e.signalMode == DBCSignalMode.MULTIPLEXOR ||
+          e.signalMode == DBCSignalMode.SIGNAL,
+    )) {
+      final signalName = signalEntry.fieldName;
+      buffer.write('\\n  ${signalEntry.name}=\$$signalName');
+    }
+
+    buffer.writeln('\';');
+
+    for (final signalEntry in signals.where(
+      (e) => e.signalMode == DBCSignalMode.MULTIPLEXOR,
+    )) {
+      generateSubMultiplex(signalEntry, signals, buffer, (signal) {
+        final fieldName = signal.fieldName;
+
+        buffer.writeln('stringValue += \'\\n  ${signal.name}=\$$fieldName\';');
+      });
+    }
+
+    buffer.writeln('stringValue += \'\\n)\';');
+    buffer.writeln('return stringValue; }');
+  } else {
+    buffer.writeln('String toString() => ');
+    buffer.write('\'$messageName(');
+    for (final signal in signals) {
+      final signalName = signal.fieldName;
+      buffer.write('\\n  ${signal.name}=\$$signalName');
+    }
+    buffer.writeln('\\n)\';');
+  }
+}
+
+void _generateToJson(
+  StringBuffer buffer,
+  List<DBCSignal> signals,
+  bool isMultiplex,
+) {
+  buffer.writeln('@override');
+  if (isMultiplex) {
+    buffer.writeln('Map<String, dynamic> toJson() {');
+    buffer.writeln('Map<String, dynamic> json = {');
+
+    for (final signalEntry in signals.where(
+      (e) =>
+          e.signalMode == DBCSignalMode.MULTIPLEXOR ||
+          e.signalMode == DBCSignalMode.SIGNAL,
+    )) {
+      final signalName = signalEntry.fieldName;
+      buffer.writeln('\'${signalEntry.name}\': $signalName,');
+    }
+
+    buffer.writeln('};');
+
+    for (final signalEntry in signals.where(
+      (e) => e.signalMode == DBCSignalMode.MULTIPLEXOR,
+    )) {
+      generateSubMultiplex(signalEntry, signals, buffer, (signal) {
+        final fieldName = signal.fieldName;
+
+        buffer.writeln('json[\'${signal.name}\'] = $fieldName;');
+      });
+    }
+
+    buffer.writeln('return json; }');
+  } else {
+    buffer.writeln('Map<String, dynamic> toJson() => {');
+    for (final signalEntry in signals) {
+      buffer.writeln('\'${signalEntry.name}\': ${signalEntry.fieldName},');
+    }
+    buffer.writeln('};');
+    buffer.writeln();
+  }
 }
 
 void _generateEncode(
@@ -284,51 +407,6 @@ void _generateEncode(
   buffer.writeln('final Map<$dbcLibPrefix.DBCSignal, num> values = {');
 
   if (isMultiplex) {
-    void generateSubMultiplexEncode(DBCSignal baseSignal) {
-      final List<int> allMultiplexIDs = [];
-
-      for (final signal in signals.where(
-        (e) => e.multiplexerName == baseSignal.name,
-      )) {
-        allMultiplexIDs.addAll(signal.multiplexerIds);
-      }
-
-      if (allMultiplexIDs.isEmpty) {
-        return;
-      }
-
-      allMultiplexIDs.sort();
-
-      buffer.writeln('switch (${baseSignal.fieldName}) {');
-
-      for (final id in allMultiplexIDs.toSet()) {
-        buffer.writeln('case $id:');
-
-        for (final compatibleSignal in signals.where(
-          (e) =>
-              e.multiplexerIds.contains(id) &&
-              e.multiplexerName == baseSignal.name,
-        )) {
-          final fieldName = compatibleSignal.fieldName;
-          final signalFieldName = '_${compatibleSignal.fieldName}Signal';
-
-          buffer.writeln('values[$signalFieldName] = $fieldName;');
-        }
-
-        for (final compatibleSignal in signals.where(
-          (e) =>
-              e.multiplexerIds.contains(id) &&
-              e.multiplexerName == baseSignal.name,
-        )) {
-          generateSubMultiplexEncode(compatibleSignal);
-        }
-
-        buffer.writeln('break;');
-      }
-
-      buffer.writeln('default: break; }');
-    }
-
     for (final signalEntry in signals.where(
       (e) =>
           e.signalMode == DBCSignalMode.MULTIPLEXOR ||
@@ -344,7 +422,12 @@ void _generateEncode(
     for (final signalEntry in signals.where(
       (e) => e.signalMode == DBCSignalMode.MULTIPLEXOR,
     )) {
-      generateSubMultiplexEncode(signalEntry);
+      generateSubMultiplex(signalEntry, signals, buffer, (signal) {
+        final fieldName = signal.fieldName;
+        final signalFieldName = '_${signal.fieldName}Signal';
+
+        buffer.writeln('values[$signalFieldName] = $fieldName;');
+      });
     }
   } else {
     for (final signalEntry in signals) {
@@ -377,57 +460,6 @@ void _generateDecode(
   buffer.writeln();
 
   if (isMultiplex) {
-    // Function to recursively generate switch statements for multiplex signals
-    void generateSubMultiplex(DBCSignal baseSignal) {
-      final List<int> allMultiplexIDs = [];
-
-      for (final signal in signals.where(
-        (e) => e.multiplexerName == baseSignal.name,
-      )) {
-        allMultiplexIDs.addAll(signal.multiplexerIds);
-      }
-
-      if (allMultiplexIDs.isEmpty) {
-        return;
-      }
-
-      allMultiplexIDs.sort();
-
-      buffer.writeln('switch (message.${baseSignal.fieldName}) {');
-
-      for (final id in allMultiplexIDs.toSet()) {
-        buffer.writeln('case $id:');
-
-        for (final compatibleSignal in signals.where(
-          (e) =>
-              e.multiplexerIds.contains(id) &&
-              e.multiplexerName == baseSignal.name,
-        )) {
-          final fieldName = compatibleSignal.fieldName;
-          final signalFieldName = '_${compatibleSignal.fieldName}Signal';
-          final typeConversion =
-              'to${compatibleSignal.dataType.toCapitalCase()}()';
-
-          buffer.writeln(
-            'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, compatibleSignal.min).toStringMinDecimal()}).$typeConversion;',
-          );
-        }
-
-        for (final compatibleSignal in signals.where(
-          (e) =>
-              e.multiplexerIds.contains(id) &&
-              e.multiplexerName == baseSignal.name,
-        )) {
-          generateSubMultiplex(compatibleSignal);
-        }
-
-        buffer.writeln('break;');
-      }
-
-      buffer.writeln('default: break; }');
-    }
-
-    // First decode all of the regular signals
     for (final signalEntry in signals.where(
       (e) => e.signalMode == DBCSignalMode.SIGNAL,
     )) {
@@ -452,7 +484,21 @@ void _generateDecode(
         'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, signalEntry.min).toStringMinDecimal()}).$typeConversion;',
       );
 
-      generateSubMultiplex(signalEntry);
+      generateSubMultiplex(
+        switchPrefix: 'message.',
+        signalEntry,
+        signals,
+        buffer,
+        (signal) {
+          final fieldName = signal.fieldName;
+          final signalFieldName = '_${signal.fieldName}Signal';
+          final typeConversion = 'to${signal.dataType.toCapitalCase()}()';
+
+          buffer.writeln(
+            'message.$fieldName = (message.$signalFieldName.decode(bitField) ?? ${max(0, signal.min).toStringMinDecimal()}).$typeConversion;',
+          );
+        },
+      );
     }
   } else {
     for (final signalEntry in signals) {

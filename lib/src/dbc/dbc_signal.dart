@@ -98,7 +98,7 @@ class DBCSignal {
   static RegExp offsetRegex = RegExp(r",([0-9.\-Ee]+)\)");
   static RegExp minRegex = RegExp(r"\[([0-9.\-\+Ee]+)\|");
   static RegExp maxRegex = RegExp(r"\|([0-9.\-\+Ee]+)\]");
-  static RegExp unitRegex = RegExp(r'\] "([a-zA-Z\/0-9%!^°-\s]*)" ');
+  static RegExp unitRegex = RegExp(r'\] "([a-zA-Z\/0-9%!^°.?/*+-\s]*)" ');
 
   /// When a DBC file is initially parsed each signals are constructed on a line-by-line basis
   static DBCSignal fromString(String name, String data, int lengthOfMessage) {
